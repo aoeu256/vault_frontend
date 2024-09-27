@@ -1,11 +1,12 @@
 'use client';
 
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { useEffect, useState, useMemo } from 'react';
+import { useAnchorWallet, useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { BN, Program, Idl, AnchorProvider, setProvider } from "@coral-xyz/anchor";
 import dynamic from 'next/dynamic';
-import { AnchorProvider, BN } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
-import { useEffect, useState } from 'react';
-import { getProgram } from '@/utils/anchorProgram';
+import { Vault } from "@/types/Vault";
+import idl from "@/utils/vault.json";
 
 // Dynamically import WalletMultiButton to disable SSR
 const WalletMultiButton = dynamic(
@@ -13,9 +14,29 @@ const WalletMultiButton = dynamic(
   { ssr: false }
 );
 
+/* eslint-disable react-hooks/rules-of-hooks */
+const getProgram = () => {
+  const { connection } = useConnection();  // Correct destructuring
+  const wallet = useAnchorWallet();
+
+  // Memoize the program instance to avoid re-creating it on every render
+  return useMemo(() => {
+    if (!wallet) {
+      console.error("Wallet is not connected");
+      return null;
+    }
+
+    const provider = new AnchorProvider(connection, wallet, {});
+    setProvider(provider);
+
+    const program = new Program(idl as Idl, provider) as unknown as Program<Vault>;
+    return program;
+  }, [wallet, connection]);
+}
+/* eslint-enable react-hooks/rules-of-hooks */
+
 const VaultPage = () => {
-  const { connection } = useConnection();
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey } = useWallet();
   const [balance, setBalance] = useState<number>(0);
   const [amount, setAmount] = useState<number>(0);
   const [transactionStatus, setTransactionStatus] = useState<string | null>(null);
@@ -67,7 +88,6 @@ const VaultPage = () => {
   const fetchUserBalance = async () => {
     if (!publicKey || !userVaultPublicKey) return;
 
-    const provider = new AnchorProvider(connection, { publicKey, signTransaction } as any, { preflightCommitment: 'confirmed' });
     const program = getProgram();
 
     if (!program) {
@@ -89,7 +109,6 @@ const VaultPage = () => {
   const handleDeposit = async () => {
     if (!publicKey || !vaultPublicKey || !userVaultPublicKey) return;
 
-    const provider = new AnchorProvider(connection, { publicKey, signTransaction } as any, { preflightCommitment: 'confirmed' });
     const program = getProgram();
 
     if (!program) {
