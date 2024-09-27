@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import WalletContextProvider from "@/components/WalletProvider";
 
 export const metadata = {

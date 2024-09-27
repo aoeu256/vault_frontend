@@ -1,11 +1,17 @@
 'use client';
 
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import dynamic from 'next/dynamic';
 import { AnchorProvider, BN } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
 import { getProgram } from '@/utils/anchorProgram';
+
+// Dynamically import WalletMultiButton to disable SSR
+const WalletMultiButton = dynamic(
+  () => import('@solana/wallet-adapter-react-ui').then((mod) => mod.WalletMultiButton),
+  { ssr: false }
+);
 
 const VaultPage = () => {
   const { connection } = useConnection();
@@ -15,21 +21,51 @@ const VaultPage = () => {
   const [transactionStatus, setTransactionStatus] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Public keys for your smart contract and token accounts
-  const vaultPublicKey = new PublicKey("Ee9f4ZsLH92gVrUrynGu1CA7fjbhkMh15ixubtTNQEma");
-  const userVaultPublicKey = new PublicKey("5VFB3EhNtTusXfNEEVcjTgWXT8jNUHHyGnUj8FySKKSu");
-  const userTokenAccountPublicKey = new PublicKey("5VFB3EhNtTusXfNEEVcjTgWXT8jNUHHyGnUj8FySKKSu");
+  // Public keys for token accounts and program (fixed ones)
+  const userTokenAccountPublicKey = new PublicKey("DbT1dhnjUbVbybDMP1dryFF1LEJSm7F3s5XuLSv799rD");
   const vaultTokenAccountPublicKey = new PublicKey("Ee9f4ZsLH92gVrUrynGu1CA7fjbhkMh15ixubtTNQEma");
-  const tokenProgramPublicKey = new PublicKey("Ee9f4ZsLH92gVrUrynGu1CA7fjbhkMh15ixubtTNQEma");
+  const tokenProgramPublicKey = new PublicKey("AYNDRfHivMY9ggdWnLgVsMBiZFMPYmKyq26oDwZbG5gW");
+
+  const [vaultPublicKey, setVaultPublicKey] = useState<PublicKey | null>(null);
+  const [userVaultPublicKey, setUserVaultPublicKey] = useState<PublicKey | null>(null);
 
   useEffect(() => {
     if (publicKey) {
+      derivePublicKeys();
       fetchUserBalance();
     }
   }, [publicKey]);
 
-  const fetchUserBalance = async () => {
+  const derivePublicKeys = async () => {
     if (!publicKey) return;
+
+    try {
+      const program = getProgram();
+      if (!program) {
+        throw new Error('Program is null');
+      }
+
+      // Derive the vault public key (vaultPda) using seed
+      const [vaultPda] = await PublicKey.findProgramAddress(
+        [Buffer.from("vault"), publicKey.toBuffer()],
+        program.programId
+      );
+      setVaultPublicKey(vaultPda);
+
+      // Derive the user vault public key (userVaultPda) using seed
+      const [userVaultPda] = await PublicKey.findProgramAddress(
+        [Buffer.from("uservault"), publicKey.toBuffer(), vaultPda.toBuffer()],
+        program.programId
+      );
+      setUserVaultPublicKey(userVaultPda);
+    } catch (error) {
+      console.error('Error deriving public keys:', error);
+      setErrorMessage('Failed to derive public keys.');
+    }
+  };
+
+  const fetchUserBalance = async () => {
+    if (!publicKey || !userVaultPublicKey) return;
 
     const provider = new AnchorProvider(connection, { publicKey, signTransaction } as any, { preflightCommitment: 'confirmed' });
     const program = getProgram();
@@ -51,7 +87,7 @@ const VaultPage = () => {
   };
 
   const handleDeposit = async () => {
-    if (!publicKey) return;
+    if (!publicKey || !vaultPublicKey || !userVaultPublicKey) return;
 
     const provider = new AnchorProvider(connection, { publicKey, signTransaction } as any, { preflightCommitment: 'confirmed' });
     const program = getProgram();
@@ -84,7 +120,7 @@ const VaultPage = () => {
   };
 
   const handleWithdraw = async () => {
-    if (!publicKey) return;
+    if (!publicKey || !vaultPublicKey || !userVaultPublicKey) return;
 
     const program = getProgram();
 
